@@ -11,7 +11,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["vscode", "node"]
+    "types": ["vscode", "node", "mocha"]
   },
   "include": ["src"],
   "exclude": ["node_modules", ".vscode-test"]

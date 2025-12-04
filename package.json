@@ -45,11 +45,16 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p .",
     "watch": "tsc -watch -p .",
-    "test": "echo \"No tests configured\""
+    "test": "mocha -r ts-node/register -r ./src/test/vscode-mock.ts src/**/*.test.ts"
   },
   "devDependencies": {
+    "@types/mocha": "^10.0.6",
     "@types/node": "^22.0.0",
-    "typescript": "^5.5.4",
+    "mocha": "^10.7.3",
+    "ts-node": "^10.9.2",
     "vscode": "^1.1.37"
+  },
+  "dependencies": {
+    "typescript": "^5.5.4"
   }
 }

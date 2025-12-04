@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
+import * as ts from 'typescript';
 
 function getExpression(editor: vscode.TextEditor): string {
   const { selection, document } = editor;
@@ -64,19 +65,122 @@ async function trimConsoleLogs(): Promise<void> {
 
   const document = editor.document;
   const text = document.getText();
-  const logRegex = /^\s*console\.log\([^;]*\);\s*$(\r?\n)?/gm;
+  const spans = getConsoleLogSpans(text);
 
-  if (!logRegex.test(text)) {
+  if (spans.length === 0) {
     void vscode.window.showInformationMessage('No console.log statements found.');
     return;
   }
 
-  const trimmedText = text.replace(logRegex, '');
-  const fullRange = new vscode.Range(document.positionAt(0), document.positionAt(text.length));
+  const sortedSpans = [...spans].sort((a, b) => b.start - a.start);
 
   await editor.edit((editBuilder) => {
-    editBuilder.replace(fullRange, trimmedText);
+    for (const span of sortedSpans) {
+      const range = new vscode.Range(
+        document.positionAt(span.start),
+        document.positionAt(span.end),
+      );
+
+      editBuilder.delete(range);
+    }
   });
+}
+
+export function getConsoleLogSpans(text: string): Array<{ start: number; end: number }> {
+  const sourceFile = ts.createSourceFile('file.ts', text, ts.ScriptTarget.Latest, true);
+  const spans: Array<{ start: number; end: number }> = [];
+
+  const isConsoleLog = (node: ts.CallExpression): boolean => {
+    if (!ts.isPropertyAccessExpression(node.expression)) {
+      return false;
+    }
+
+    const { expression, name } = node.expression;
+    return name.text === 'log' && ts.isIdentifier(expression) && expression.text === 'console';
+  };
+
+  const getEnclosingStatement = (node: ts.Node): ts.Node => {
+    let current: ts.Node | undefined = node;
+
+    while (current && !ts.isSourceFile(current)) {
+      if (ts.isStatement(current)) {
+        return current;
+      }
+
+      current = current.parent;
+    }
+
+    return node;
+  };
+
+  const extendToTrailingTrivia = (node: ts.Node): { start: number; end: number } => {
+    const startOfNode = node.getStart(sourceFile, true);
+    let start = startOfNode;
+
+    while (start > 0) {
+      const previousChar = text[start - 1];
+
+      if (previousChar === '\n') {
+        break;
+      }
+
+      if (previousChar === '\r') {
+        start -= 1;
+        break;
+      }
+
+      if (previousChar === ' ' || previousChar === '\t') {
+        start -= 1;
+        continue;
+      }
+
+      break;
+    }
+    let end = node.getEnd();
+
+    const trailingComments = ts.getTrailingCommentRanges(text, end);
+    if (trailingComments && trailingComments.length > 0) {
+      end = Math.max(end, ...trailingComments.map((comment) => comment.end));
+    }
+
+    let newlineConsumed = false;
+    while (end < text.length) {
+      const char = text[end];
+
+      if (char === ' ' || char === '\t' || char === '\r') {
+        end += 1;
+        continue;
+      }
+
+      if (char === '\n') {
+        if (newlineConsumed) {
+          break;
+        }
+
+        newlineConsumed = true;
+        end += 1;
+        continue;
+      }
+
+      break;
+    }
+
+    return { start, end };
+  };
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && isConsoleLog(node)) {
+      const targetNode = getEnclosingStatement(node);
+      spans.push(extendToTrailingTrivia(targetNode));
+      return;
+    }
+
+    node.forEachChild(visit);
+  };
+
+  sourceFile.forEachChild(visit);
+
+  return spans;
 }
 
 export function activate(context: vscode.ExtensionContext): void {
