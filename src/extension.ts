@@ -50,7 +50,8 @@ async function insertConsoleLog(): Promise<void> {
 
   const logStatement = createConsoleLog(editor);
   const { position, indentation } = getInsertionDetails(editor);
-  const textToInsert = `${indentation}${logStatement}\n`;
+  const newline = editor.document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
+  const textToInsert = `${indentation}${logStatement}${newline}`;
 
   await editor.edit((editBuilder) => {
     editBuilder.insert(position, textToInsert);
