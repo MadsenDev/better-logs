@@ -10,13 +10,17 @@ A simple VS Code extension that makes console logging faster and cleaning logs e
   - Prompts for a template (standard log, warn, error, JSON, or timestamped) before inserting.
   - Respects the current selection/word and indentation, adjusting the log format to match the chosen template.
 - **Trim all console.log statements** (`betterLogs.trimConsoleLogs`)
-  - Removes every `console.log(...)` line in the active file using a regex scan.
+  - Removes every `console.log(...)` statement in the active file using an AST walk that respects multi-line logs and trailing comments.
   - Shows a friendly message when no logs are found.
+- **Toggle mute on console.log statements** (`betterLogs.toggleConsoleLogsMuted`)
+  - Comments out each console log statement (single or multi-line) so it no longer runs; run again to uncomment and restore.
+  - Uses the same AST-based scan as trimming to locate logs accurately.
 
 ## Keybindings
 - `Ctrl+Alt+L` (`Cmd+Alt+L` on macOS) — Insert formatted console.log
 - `Ctrl+Alt+T` (`Cmd+Alt+T` on macOS) — Insert console.log with templates
 - `Ctrl+Alt+Shift+L` (`Cmd+Alt+Shift+L` on macOS) — Remove console.log statements
+- `Ctrl+Alt+M` (`Cmd+Alt+M` on macOS) — Toggle mute/unmute console.log statements
 
 ## Requirements
 - VS Code 1.80.0 or newer
