@@ -34,21 +34,36 @@ function getInsertionDetails(editor: vscode.TextEditor): { position: vscode.Posi
   return { position: new vscode.Position(insertionLine, insertionColumn), indentation };
 }
 
-function createConsoleLog(editor: vscode.TextEditor): string {
+type LogTemplate = 'log' | 'warn' | 'error' | 'json' | 'timestamp';
+
+function createConsoleLog(editor: vscode.TextEditor, template: LogTemplate = 'log'): string {
   const expression = getExpression(editor);
   const fileName = path.basename(editor.document.fileName);
   const lineNumber = editor.selection.active.line + 1;
+  const label = `[${fileName}:${lineNumber}] ${expression}:`;
 
-  return `console.log("[${fileName}:${lineNumber}] ${expression}:", ${expression});`;
+  switch (template) {
+    case 'warn':
+      return `console.warn("${label}", ${expression});`;
+    case 'error':
+      return `console.error("${label}", ${expression});`;
+    case 'json':
+      return `console.log("${label}", JSON.stringify(${expression}, null, 2));`;
+    case 'timestamp':
+      return `console.log(\`[\${new Date().toISOString()}] ${label}\`, ${expression});`;
+    case 'log':
+    default:
+      return `console.log("${label}", ${expression});`;
+  }
 }
 
-async function insertConsoleLog(): Promise<void> {
+async function insertConsoleLog(template: LogTemplate = 'log'): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
     return;
   }
 
-  const logStatement = createConsoleLog(editor);
+  const logStatement = createConsoleLog(editor, template);
   const { position, indentation } = getInsertionDetails(editor);
   const newline = editor.document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
   const textToInsert = `${indentation}${logStatement}${newline}`;
@@ -56,6 +71,26 @@ async function insertConsoleLog(): Promise<void> {
   await editor.edit((editBuilder) => {
     editBuilder.insert(position, textToInsert);
   });
+}
+
+async function insertConsoleLogWithTemplate(): Promise<void> {
+  const templateOptions: Array<vscode.QuickPickItem & { template: LogTemplate }> = [
+    { label: 'Standard log', description: 'console.log', template: 'log' },
+    { label: 'Warning log', description: 'console.warn', template: 'warn' },
+    { label: 'Error log', description: 'console.error', template: 'error' },
+    { label: 'JSON log', description: 'console.log(JSON.stringify(...))', template: 'json' },
+    { label: 'Timestamped log', description: 'console.log with ISO timestamp', template: 'timestamp' },
+  ];
+
+  const selection = await vscode.window.showQuickPick(templateOptions, {
+    placeHolder: 'Choose a console log template',
+  });
+
+  if (!selection) {
+    return;
+  }
+
+  await insertConsoleLog(selection.template);
 }
 
 async function trimConsoleLogs(): Promise<void> {
@@ -186,9 +221,13 @@ export function getConsoleLogSpans(text: string): Array<{ start: number; end: nu
 
 export function activate(context: vscode.ExtensionContext): void {
   const insertDisposable = vscode.commands.registerCommand('betterLogs.insertConsoleLog', insertConsoleLog);
+  const templatedInsertDisposable = vscode.commands.registerCommand(
+    'betterLogs.insertConsoleLogWithTemplate',
+    insertConsoleLogWithTemplate,
+  );
   const trimDisposable = vscode.commands.registerCommand('betterLogs.trimConsoleLogs', trimConsoleLogs);
 
-  context.subscriptions.push(insertDisposable, trimDisposable);
+  context.subscriptions.push(insertDisposable, templatedInsertDisposable, trimDisposable);
 }
 
 export function deactivate(): void {
