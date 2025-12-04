@@ -12,6 +12,7 @@
   ],
   "activationEvents": [
     "onCommand:betterLogs.insertConsoleLog",
+    "onCommand:betterLogs.insertConsoleLogWithTemplate",
     "onCommand:betterLogs.trimConsoleLogs"
   ],
   "main": "./out/extension.js",
@@ -20,6 +21,10 @@
       {
         "command": "betterLogs.insertConsoleLog",
         "title": "Better Logs: Insert console.log"
+      },
+      {
+        "command": "betterLogs.insertConsoleLogWithTemplate",
+        "title": "Better Logs: Insert console.log with template"
       },
       {
         "command": "betterLogs.trimConsoleLogs",
@@ -31,6 +36,12 @@
         "command": "betterLogs.insertConsoleLog",
         "key": "ctrl+alt+l",
         "mac": "cmd+alt+l",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "betterLogs.insertConsoleLogWithTemplate",
+        "key": "ctrl+alt+t",
+        "mac": "cmd+alt+t",
         "when": "editorTextFocus"
       },
       {

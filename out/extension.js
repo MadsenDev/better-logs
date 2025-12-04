@@ -33,10 +33,12 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.getConsoleLogSpans = getConsoleLogSpans;
 exports.activate = activate;
 exports.deactivate = deactivate;
 const path = __importStar(require("path"));
 const vscode = __importStar(require("vscode"));
+const ts = __importStar(require("typescript"));
 function getExpression(editor) {
     const { selection, document } = editor;
     if (!selection.isEmpty) {
@@ -61,23 +63,53 @@ function getInsertionDetails(editor) {
     const insertionColumn = indentation.length;
     return { position: new vscode.Position(insertionLine, insertionColumn), indentation };
 }
-function createConsoleLog(editor) {
+function createConsoleLog(editor, template = 'log') {
     const expression = getExpression(editor);
     const fileName = path.basename(editor.document.fileName);
     const lineNumber = editor.selection.active.line + 1;
-    return `console.log("[${fileName}:${lineNumber}] ${expression}:", ${expression});`;
+    const label = `[${fileName}:${lineNumber}] ${expression}:`;
+    switch (template) {
+        case 'warn':
+            return `console.warn("${label}", ${expression});`;
+        case 'error':
+            return `console.error("${label}", ${expression});`;
+        case 'json':
+            return `console.log("${label}", JSON.stringify(${expression}, null, 2));`;
+        case 'timestamp':
+            return `console.log(\`[\${new Date().toISOString()}] ${label}\`, ${expression});`;
+        case 'log':
+        default:
+            return `console.log("${label}", ${expression});`;
+    }
 }
-async function insertConsoleLog() {
+async function insertConsoleLog(template = 'log') {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
         return;
     }
-    const logStatement = createConsoleLog(editor);
+    const logStatement = createConsoleLog(editor, template);
     const { position, indentation } = getInsertionDetails(editor);
-    const textToInsert = `${indentation}${logStatement}\n`;
+    const newline = editor.document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
+    const textToInsert = `${indentation}${logStatement}${newline}`;
     await editor.edit((editBuilder) => {
         editBuilder.insert(position, textToInsert);
     });
+}
+async function insertConsoleLogWithTemplate() {
+    const templateOptions = [
+        { label: 'Standard log', description: 'console.log', template: 'log' },
+        { label: 'Warning log', description: 'console.warn', template: 'warn' },
+        { label: 'Error log', description: 'console.error', template: 'error' },
+        { label: 'JSON log', description: 'console.log(JSON.stringify(...))', template: 'json' },
+        { label: 'Timestamped log', description: 'console.log with ISO timestamp', template: 'timestamp' },
+    ];
+    const selection = await vscode.window.showQuickPick(templateOptions, {
+        placeHolder: 'Choose a console log template',
+    });
+    if (!selection) {
+        return;
+    }
+    await insertConsoleLog(selection.template);
 }
 async function trimConsoleLogs() {
     const editor = vscode.window.activeTextEditor;
@@ -86,21 +118,97 @@ async function trimConsoleLogs() {
     }
     const document = editor.document;
     const text = document.getText();
-    const logRegex = /^\s*console\.log\([^;]*\);\s*$(\r?\n)?/gm;
-    if (!logRegex.test(text)) {
+    const spans = getConsoleLogSpans(text);
+    if (spans.length === 0) {
         void vscode.window.showInformationMessage('No console.log statements found.');
         return;
     }
-    const trimmedText = text.replace(logRegex, '');
-    const fullRange = new vscode.Range(document.positionAt(0), document.positionAt(text.length));
+    const sortedSpans = [...spans].sort((a, b) => b.start - a.start);
     await editor.edit((editBuilder) => {
-        editBuilder.replace(fullRange, trimmedText);
+        for (const span of sortedSpans) {
+            const range = new vscode.Range(document.positionAt(span.start), document.positionAt(span.end));
+            editBuilder.delete(range);
+        }
     });
+}
+function getConsoleLogSpans(text) {
+    const sourceFile = ts.createSourceFile('file.ts', text, ts.ScriptTarget.Latest, true);
+    const spans = [];
+    const isConsoleLog = (node) => {
+        if (!ts.isPropertyAccessExpression(node.expression)) {
+            return false;
+        }
+        const { expression, name } = node.expression;
+        return name.text === 'log' && ts.isIdentifier(expression) && expression.text === 'console';
+    };
+    const getEnclosingStatement = (node) => {
+        let current = node;
+        while (current && !ts.isSourceFile(current)) {
+            if (ts.isStatement(current)) {
+                return current;
+            }
+            current = current.parent;
+        }
+        return node;
+    };
+    const extendToTrailingTrivia = (node) => {
+        const startOfNode = node.getStart(sourceFile, true);
+        let start = startOfNode;
+        while (start > 0) {
+            const previousChar = text[start - 1];
+            if (previousChar === '\n') {
+                break;
+            }
+            if (previousChar === '\r') {
+                start -= 1;
+                break;
+            }
+            if (previousChar === ' ' || previousChar === '\t') {
+                start -= 1;
+                continue;
+            }
+            break;
+        }
+        let end = node.getEnd();
+        const trailingComments = ts.getTrailingCommentRanges(text, end);
+        if (trailingComments && trailingComments.length > 0) {
+            end = Math.max(end, ...trailingComments.map((comment) => comment.end));
+        }
+        let newlineConsumed = false;
+        while (end < text.length) {
+            const char = text[end];
+            if (char === ' ' || char === '\t' || char === '\r') {
+                end += 1;
+                continue;
+            }
+            if (char === '\n') {
+                if (newlineConsumed) {
+                    break;
+                }
+                newlineConsumed = true;
+                end += 1;
+                continue;
+            }
+            break;
+        }
+        return { start, end };
+    };
+    const visit = (node) => {
+        if (ts.isCallExpression(node) && isConsoleLog(node)) {
+            const targetNode = getEnclosingStatement(node);
+            spans.push(extendToTrailingTrivia(targetNode));
+            return;
+        }
+        node.forEachChild(visit);
+    };
+    sourceFile.forEachChild(visit);
+    return spans;
 }
 function activate(context) {
     const insertDisposable = vscode.commands.registerCommand('betterLogs.insertConsoleLog', insertConsoleLog);
+    const templatedInsertDisposable = vscode.commands.registerCommand('betterLogs.insertConsoleLogWithTemplate', insertConsoleLogWithTemplate);
     const trimDisposable = vscode.commands.registerCommand('betterLogs.trimConsoleLogs', trimConsoleLogs);
-    context.subscriptions.push(insertDisposable, trimDisposable);
+    context.subscriptions.push(insertDisposable, templatedInsertDisposable, trimDisposable);
 }
 function deactivate() {
     // No-op
