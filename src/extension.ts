@@ -122,6 +122,81 @@ async function trimConsoleLogs(): Promise<void> {
   });
 }
 
+async function toggleConsoleLogsMuted(): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    return;
+  }
+
+  const { document } = editor;
+  const spans = getConsoleLogSpans(document.getText());
+
+  if (spans.length === 0) {
+    void vscode.window.showInformationMessage('No console.log statements found.');
+    return;
+  }
+
+  type SpanLines = { startLine: number; endLine: number; isMuted: boolean };
+
+  const spanLines: SpanLines[] = spans.map((span) => {
+    const start = document.positionAt(span.start);
+    const end = document.positionAt(span.end);
+
+    const startLine = start.line;
+    const endLine = end.character === 0 && end.line > startLine ? end.line - 1 : end.line;
+
+    const isMuted = (() => {
+      for (let line = startLine; line <= endLine; line += 1) {
+        const text = document.lineAt(line).text;
+        if (!text.trimStart().startsWith('//')) {
+          return false;
+        }
+      }
+
+      return true;
+    })();
+
+    return { startLine, endLine, isMuted };
+  });
+
+  const processedLines = new Set<number>();
+
+  await editor.edit((editBuilder) => {
+    for (const spanLine of spanLines) {
+      const { startLine, endLine, isMuted } = spanLine;
+
+      for (let line = startLine; line <= endLine; line += 1) {
+        if (processedLines.has(line)) {
+          continue;
+        }
+
+        processedLines.add(line);
+        const lineText = document.lineAt(line).text;
+        const indentLength = lineText.length - lineText.trimStart().length;
+        const commentIndex = indentLength;
+
+        if (isMuted) {
+          if (lineText.startsWith('//', commentIndex)) {
+            let deleteLength = 2;
+            if (lineText.charAt(commentIndex + 2) === ' ') {
+              deleteLength += 1;
+            }
+
+            editBuilder.delete(
+              new vscode.Range(
+                new vscode.Position(line, commentIndex),
+                new vscode.Position(line, commentIndex + deleteLength),
+              ),
+            );
+          }
+        } else {
+          editBuilder.insert(new vscode.Position(line, commentIndex), '// ');
+        }
+      }
+    }
+  });
+}
+
 export function getConsoleLogSpans(text: string): Array<{ start: number; end: number }> {
   const sourceFile = ts.createSourceFile('file.ts', text, ts.ScriptTarget.Latest, true);
   const spans: Array<{ start: number; end: number }> = [];
@@ -226,8 +301,12 @@ export function activate(context: vscode.ExtensionContext): void {
     insertConsoleLogWithTemplate,
   );
   const trimDisposable = vscode.commands.registerCommand('betterLogs.trimConsoleLogs', trimConsoleLogs);
+  const toggleMuteDisposable = vscode.commands.registerCommand(
+    'betterLogs.toggleConsoleLogsMuted',
+    toggleConsoleLogsMuted,
+  );
 
-  context.subscriptions.push(insertDisposable, templatedInsertDisposable, trimDisposable);
+  context.subscriptions.push(insertDisposable, templatedInsertDisposable, trimDisposable, toggleMuteDisposable);
 }
 
 export function deactivate(): void {

@@ -13,7 +13,8 @@
   "activationEvents": [
     "onCommand:betterLogs.insertConsoleLog",
     "onCommand:betterLogs.insertConsoleLogWithTemplate",
-    "onCommand:betterLogs.trimConsoleLogs"
+    "onCommand:betterLogs.trimConsoleLogs",
+    "onCommand:betterLogs.toggleConsoleLogsMuted"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -29,6 +30,10 @@
       {
         "command": "betterLogs.trimConsoleLogs",
         "title": "Better Logs: Trim console.logs"
+      },
+      {
+        "command": "betterLogs.toggleConsoleLogsMuted",
+        "title": "Better Logs: Toggle console.log mute"
       }
     ],
     "keybindings": [
@@ -48,6 +53,12 @@
         "command": "betterLogs.trimConsoleLogs",
         "key": "ctrl+alt+shift+l",
         "mac": "cmd+alt+shift+l",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "betterLogs.toggleConsoleLogsMuted",
+        "key": "ctrl+alt+m",
+        "mac": "cmd+alt+m",
         "when": "editorTextFocus"
       }
     ]
