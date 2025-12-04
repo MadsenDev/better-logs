@@ -16,6 +16,11 @@ A simple VS Code extension that makes console logging faster and cleaning logs e
   - Comments out each console log statement (single or multi-line) so it no longer runs; run again to uncomment and restore.
   - Uses the same AST-based scan as trimming to locate logs accurately.
 
+## Settings
+- `betterLogs.trimOnSave` (default: `false`)
+  - When enabled, the extension automatically removes `console.log` statements from supported JavaScript and TypeScript files on save.
+  - Turn it on in your VS Code settings or set in `settings.json`: `{"betterLogs.trimOnSave": true}`. Set to `false` to disable.
+
 ## Keybindings
 - `Ctrl+Alt+L` (`Cmd+Alt+L` on macOS) — Insert formatted console.log
 - `Ctrl+Alt+T` (`Cmd+Alt+T` on macOS) — Insert console.log with templates
