@@ -1,0 +1,55 @@
+{
+  "name": "better-logs",
+  "displayName": "Better Logs",
+  "description": "Improve developer workflow by making console logging fast and cleaning logs easy.",
+  "version": "0.0.1",
+  "publisher": "codex",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:betterLogs.insertConsoleLog",
+    "onCommand:betterLogs.trimConsoleLogs"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "betterLogs.insertConsoleLog",
+        "title": "Better Logs: Insert console.log"
+      },
+      {
+        "command": "betterLogs.trimConsoleLogs",
+        "title": "Better Logs: Trim console.logs"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "betterLogs.insertConsoleLog",
+        "key": "ctrl+alt+l",
+        "mac": "cmd+alt+l",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "betterLogs.trimConsoleLogs",
+        "key": "ctrl+alt+shift+l",
+        "mac": "cmd+alt+shift+l",
+        "when": "editorTextFocus"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "test": "echo \"No tests configured\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.4",
+    "vscode": "^1.1.37"
+  }
+}
