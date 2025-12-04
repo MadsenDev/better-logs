@@ -295,6 +295,14 @@ export function getConsoleLogSpans(text: string): Array<{ start: number; end: nu
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  const supportedLanguages = ['javascript', 'javascriptreact', 'typescript', 'typescriptreact'];
+
+  const isSupportedLanguage = (document: vscode.TextDocument): boolean =>
+    supportedLanguages.includes(document.languageId);
+
+  const isTrimOnSaveEnabled = (document: vscode.TextDocument): boolean =>
+    vscode.workspace.getConfiguration('betterLogs', document.uri).get<boolean>('trimOnSave', false);
+
   const insertDisposable = vscode.commands.registerCommand('betterLogs.insertConsoleLog', insertConsoleLog);
   const templatedInsertDisposable = vscode.commands.registerCommand(
     'betterLogs.insertConsoleLogWithTemplate',
@@ -306,7 +314,40 @@ export function activate(context: vscode.ExtensionContext): void {
     toggleConsoleLogsMuted,
   );
 
-  context.subscriptions.push(insertDisposable, templatedInsertDisposable, trimDisposable, toggleMuteDisposable);
+  const onWillSaveDisposable = vscode.workspace.onWillSaveTextDocument((event) => {
+    if (!isSupportedLanguage(event.document)) {
+      return;
+    }
+
+    if (!isTrimOnSaveEnabled(event.document)) {
+      return;
+    }
+
+    const hasMatchingEditor = vscode.window.visibleTextEditors.some(
+      (textEditor) => textEditor.document === event.document,
+    );
+    if (!hasMatchingEditor) {
+      return;
+    }
+
+    const trimPromise = (async () => {
+      if (vscode.window.activeTextEditor?.document !== event.document) {
+        await vscode.window.showTextDocument(event.document, { preview: false, preserveFocus: false });
+      }
+
+      await trimConsoleLogs();
+    })();
+
+    event.waitUntil(trimPromise);
+  });
+
+  context.subscriptions.push(
+    insertDisposable,
+    templatedInsertDisposable,
+    trimDisposable,
+    toggleMuteDisposable,
+    onWillSaveDisposable,
+  );
 }
 
 export function deactivate(): void {

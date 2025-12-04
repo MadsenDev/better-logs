@@ -11,6 +11,11 @@
     "Other"
   ],
   "activationEvents": [
+    "onStartupFinished",
+    "onLanguage:javascript",
+    "onLanguage:javascriptreact",
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact",
     "onCommand:betterLogs.insertConsoleLog",
     "onCommand:betterLogs.insertConsoleLogWithTemplate",
     "onCommand:betterLogs.trimConsoleLogs",
@@ -61,7 +66,17 @@
         "mac": "cmd+alt+m",
         "when": "editorTextFocus"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Better Logs",
+      "properties": {
+        "betterLogs.trimOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically remove console.log statements in supported languages when saving a file."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
