@@ -93,6 +93,36 @@ async function insertConsoleLogWithTemplate(): Promise<void> {
   await insertConsoleLog(selection.template);
 }
 
+async function insertConsoleLogFromContextMenu(): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  
+  if (!editor) {
+    return;
+  }
+
+  const { document, selection } = editor;
+  
+  // If there's already a selection, use it; otherwise get the word at cursor
+  let expressionRange: vscode.Range | undefined;
+  
+  if (!selection.isEmpty) {
+    expressionRange = selection;
+  } else {
+    expressionRange = document.getWordRangeAtPosition(selection.active);
+  }
+  
+  if (!expressionRange) {
+    void vscode.window.showWarningMessage('No variable found at cursor position.');
+    return;
+  }
+
+  // Set selection to the expression so getExpression picks it up
+  editor.selection = new vscode.Selection(expressionRange.start, expressionRange.end);
+
+  // Insert the console log
+  await insertConsoleLog('log');
+}
+
 async function trimConsoleLogs(): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
@@ -104,7 +134,7 @@ async function trimConsoleLogs(): Promise<void> {
   const spans = getConsoleLogSpans(text);
 
   if (spans.length === 0) {
-    void vscode.window.showInformationMessage('No console.log statements found.');
+    void vscode.window.showInformationMessage('No console statements found.');
     return;
   }
 
@@ -132,7 +162,7 @@ async function toggleConsoleLogsMuted(): Promise<void> {
   const spans = getConsoleLogSpans(document.getText());
 
   if (spans.length === 0) {
-    void vscode.window.showInformationMessage('No console.log statements found.');
+    void vscode.window.showInformationMessage('No console statements found.');
     return;
   }
 
@@ -201,13 +231,16 @@ export function getConsoleLogSpans(text: string): Array<{ start: number; end: nu
   const sourceFile = ts.createSourceFile('file.ts', text, ts.ScriptTarget.Latest, true);
   const spans: Array<{ start: number; end: number }> = [];
 
-  const isConsoleLog = (node: ts.CallExpression): boolean => {
+  // Supported console methods
+  const consoleMethods = ['log', 'warn', 'error', 'info', 'debug', 'trace', 'table', 'dir', 'dirxml', 'group', 'groupEnd', 'groupCollapsed', 'time', 'timeEnd', 'timeLog', 'count', 'countReset', 'assert', 'clear'];
+
+  const isConsoleMethod = (node: ts.CallExpression): boolean => {
     if (!ts.isPropertyAccessExpression(node.expression)) {
       return false;
     }
 
     const { expression, name } = node.expression;
-    return name.text === 'log' && ts.isIdentifier(expression) && expression.text === 'console';
+    return consoleMethods.includes(name.text) && ts.isIdentifier(expression) && expression.text === 'console';
   };
 
   const getEnclosingStatement = (node: ts.Node): ts.Node => {
@@ -280,7 +313,7 @@ export function getConsoleLogSpans(text: string): Array<{ start: number; end: nu
   };
 
   const visit = (node: ts.Node): void => {
-    if (ts.isCallExpression(node) && isConsoleLog(node)) {
+    if (ts.isCallExpression(node) && isConsoleMethod(node)) {
       const targetNode = getEnclosingStatement(node);
       spans.push(extendToTrailingTrivia(targetNode));
       return;
@@ -307,6 +340,10 @@ export function activate(context: vscode.ExtensionContext): void {
   const templatedInsertDisposable = vscode.commands.registerCommand(
     'betterLogs.insertConsoleLogWithTemplate',
     insertConsoleLogWithTemplate,
+  );
+  const contextMenuDisposable = vscode.commands.registerCommand(
+    'betterLogs.insertConsoleLogFromContext',
+    insertConsoleLogFromContextMenu,
   );
   const trimDisposable = vscode.commands.registerCommand('betterLogs.trimConsoleLogs', trimConsoleLogs);
   const toggleMuteDisposable = vscode.commands.registerCommand(
@@ -344,6 +381,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     insertDisposable,
     templatedInsertDisposable,
+    contextMenuDisposable,
     trimDisposable,
     toggleMuteDisposable,
     onWillSaveDisposable,
